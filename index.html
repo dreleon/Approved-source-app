@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="68R Source">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>68R Source Awareness</title>
+<style>
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%; width: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  background: #FAFAFA; color: #1C1C1E;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+button { font-family: inherit; border: none; cursor: pointer; -webkit-appearance: none; }
+input, textarea { font-family: inherit; border: none; outline: none; -webkit-appearance: none; }
+
+/* ── App Shell ── */
+.app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
+.view { display: none; flex-direction: column; flex: 1; overflow-y: auto; }
+.view.active { display: flex; }
+
+/* ── Header ── */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px; background: #fff;
+  border-bottom: 1px solid #E5E5EA; flex-shrink: 0;
+  min-height: 52px;
+}
+.header-title { font-size: 17px; font-weight: 600; }
+.header-btn {
+  font-size: 15px; color: #3478F6; background: none; font-weight: 500;
+  min-width: 44px; min-height: 44px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ── Tab Bar ── */
+.tab-bar {
+  display: flex; background: #fff; border-top: 1px solid #E5E5EA;
+  flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom);
+}
+.tab-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 8px 0 6px; background: none;
+  color: #8E8E93; font-size: 10px; font-weight: 500;
+  min-height: 50px;
+}
+.tab-btn.active { color: #3478F6; }
+.tab-btn svg { width: 24px; height: 24px; margin-bottom: 2px; }
+
+/* ── Disclaimer Banner ── */
+.disclaimer {
+  background: #F0F0F0; text-align: center; padding: 8px 16px;
+  font-size: 11px; color: #636366; flex-shrink: 0; line-height: 1.4;
+}
+
+/* ── Camera View ── */
+.camera-area {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  position: relative; background: #000; overflow: hidden;
+}
+.camera-area video {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.camera-area canvas { display: none; }
+.camera-placeholder {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; color: #aaa; gap: 12px; padding: 20px;
+  text-align: center;
+}
+.camera-placeholder svg { width: 64px; height: 64px; opacity: 0.5; }
+.camera-controls {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px 20px 32px; gap: 24px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.5));
+}
+.capture-btn {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: #fff; border: 4px solid rgba(255,255,255,0.5);
+  flex-shrink: 0; transition: transform 0.1s;
+}
+.capture-btn:active { transform: scale(0.92); }
+.secondary-btn {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: rgba(255,255,255,0.2); display: flex;
+  align-items: center; justify-content: center;
+}
+.secondary-btn svg { width: 22px; height: 22px; color: #fff; }
+
+/* ── UPC Input Bar ── */
+.upc-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; background: #fff; border-top: 1px solid #E5E5EA;
+  flex-shrink: 0;
+}
+.upc-bar input {
+  flex: 1; height: 40px; border-radius: 10px; background: #F0F0F0;
+  padding: 0 14px; font-size: 15px;
+}
+.upc-bar button {
+  height: 40px; padding: 0 16px; border-radius: 10px;
+  background: #3478F6; color: #fff; font-size: 15px; font-weight: 500;
+}
+
+/* ── Result View ── */
+.result-scroll { flex: 1; overflow-y: auto; padding: 16px; }
+.result-card {
+  background: #fff; border-radius: 16px;
+  box-shadow: 0 0 8px rgba(0,0,0,0.08);
+  overflow: hidden; margin-bottom: 16px;
+}
+.result-photo {
+  width: 100%; aspect-ratio: 4/3; object-fit: cover;
+  background: #E5E5EA; display: block;
+}
+.result-body { padding: 16px; }
+.result-meta { font-size: 13px; color: #8E8E93; margin-bottom: 10px; }
+.status-badge {
+  display: inline-block; padding: 6px 14px; border-radius: 20px;
+  font-size: 14px; font-weight: 500; margin-bottom: 12px;
+}
+.status-badge.listed { background: #E8E8ED; color: #48484A; }
+.status-badge.pending { background: #FFF3D6; color: #946800; }
+.status-badge.mixed { background: #E0EDFF; color: #1D5BBF; }
+.status-badge.none { background: #F0F0F0; color: #636366; }
+.result-guidance {
+  font-size: 14px; color: #636366; line-height: 1.5;
+  margin-top: 8px; padding-top: 12px; border-top: 1px solid #F0F0F0;
+}
+.result-actions { display: flex; flex-direction: column; gap: 10px; padding: 0 16px 16px; }
+.action-btn {
+  width: 100%; height: 48px; border-radius: 12px;
+  font-size: 16px; font-weight: 500; display: flex;
+  align-items: center; justify-content: center; gap: 8px;
+}
+.action-btn.primary { background: #3478F6; color: #fff; }
+.action-btn.secondary { background: #F0F0F0; color: #1C1C1E; }
+.action-btn.amber { background: #F5A623; color: #fff; }
+
+/* ── Notes Modal ── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  z-index: 100; align-items: flex-end; justify-content: center;
+}
+.modal-overlay.active { display: flex; }
+.modal-sheet {
+  background: #fff; width: 100%; max-height: 70vh;
+  border-radius: 16px 16px 0 0; padding: 20px;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column;
+}
+.modal-sheet h3 { font-size: 17px; font-weight: 600; margin-bottom: 12px; }
+.modal-sheet textarea {
+  flex: 1; min-height: 120px; border-radius: 10px;
+  background: #F0F0F0; padding: 12px; font-size: 15px;
+  resize: none; line-height: 1.4;
+}
+.modal-actions { display: flex; gap: 10px; margin-top: 12px; }
+.modal-actions button { flex: 1; height: 44px; border-radius: 10px; font-size: 15px; font-weight: 500; }
+
+/* ── History View ── */
+.history-scroll { flex: 1; overflow-y: auto; padding: 16px; }
+.history-empty {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; flex: 1; color: #8E8E93;
+  text-align: center; gap: 8px; padding: 40px 20px;
+}
+.history-empty svg { width: 48px; height: 48px; opacity: 0.4; }
+.history-card {
+  display: flex; gap: 12px; background: #fff; border-radius: 12px;
+  box-shadow: 0 0 6px rgba(0,0,0,0.06); padding: 12px;
+  margin-bottom: 10px; align-items: center;
+}
+.history-thumb {
+  width: 60px; height: 60px; border-radius: 8px;
+  object-fit: cover; background: #E5E5EA; flex-shrink: 0;
+}
+.history-info { flex: 1; min-width: 0; }
+.history-info .status { font-size: 14px; font-weight: 500; }
+.history-info .date { font-size: 12px; color: #8E8E93; margin-top: 2px; }
+.history-info .esc-tag {
+  display: inline-block; font-size: 11px; padding: 2px 8px;
+  border-radius: 10px; margin-top: 4px;
+  background: #FFF3D6; color: #946800;
+}
+.filter-bar {
+  display: flex; gap: 8px; padding: 0 16px 8px; overflow-x: auto;
+  flex-shrink: 0;
+}
+.filter-chip {
+  padding: 6px 14px; border-radius: 16px; font-size: 13px;
+  background: #F0F0F0; color: #636366; white-space: nowrap;
+}
+.filter-chip.active { background: #3478F6; color: #fff; }
+
+/* ── Detail View ── */
+.detail-scroll { flex: 1; overflow-y: auto; padding: 16px; }
+.audit-section { margin-top: 16px; }
+.audit-section h4 { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #636366; }
+.audit-entry {
+  font-size: 13px; color: #636366; padding: 6px 0;
+  border-bottom: 1px solid #F0F0F0; line-height: 1.4;
+}
+.audit-entry .time { font-size: 11px; color: #AEAEB2; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ── CAMERA VIEW ── -->
+  <div id="viewCamera" class="view active">
+    <div class="header">
+      <span></span>
+      <span class="header-title">68R Source Awareness</span>
+      <button class="header-btn" onclick="showView('history')">History</button>
+    </div>
+    <div class="camera-area" id="cameraArea">
+      <video id="cameraVideo" autoplay playsinline muted></video>
+      <canvas id="cameraCanvas"></canvas>
+      <div id="cameraPlaceholder" class="camera-placeholder" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <span>Camera access required</span>
+        <button class="action-btn secondary" style="width:auto;height:auto;padding:10px 20px;font-size:14px;" onclick="initCamera()">Enable Camera</button>
+      </div>
+      <div class="camera-controls" id="cameraControls">
+        <label class="secondary-btn" for="fileInput">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        </label>
+        <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none" onchange="handleFileUpload(event)">
+        <button class="capture-btn" id="captureBtn" onclick="capturePhoto()"></button>
+        <div style="width:44px;"></div>
+      </div>
+    </div>
+    <div class="upc-bar">
+      <input type="text" id="upcInput" placeholder="Enter UPC manually" inputmode="numeric" pattern="[0-9]*">
+      <button onclick="lookupUPC()">Look Up</button>
+    </div>
+    <div class="disclaimer">This tool does not authorize use or rejection of products.</div>
+  </div>
+
+  <!-- ── RESULT VIEW ── -->
+  <div id="viewResult" class="view">
+    <div class="header">
+      <button class="header-btn" onclick="showView('camera')">New Scan</button>
+      <span class="header-title">Submission</span>
+      <span></span>
+    </div>
+    <div class="result-scroll">
+      <div class="result-card">
+        <img id="resultPhoto" class="result-photo" alt="Captured product photo">
+        <div class="result-body">
+          <div class="result-meta" id="resultMeta"></div>
+          <div class="status-badge" id="resultBadge"></div>
+          <div class="result-guidance" id="resultGuidance"></div>
+        </div>
+      </div>
+    </div>
+    <div class="result-actions">
+      <button class="action-btn secondary" onclick="openNotes()">Add Notes</button>
+      <button class="action-btn amber" id="escalateBtn" onclick="escalateToFSO()">Document &amp; Contact FSO</button>
+      <button class="action-btn primary" onclick="showView('camera')">New Scan</button>
+    </div>
+    <div class="disclaimer">This tool does not authorize use or rejection of products.</div>
+  </div>
+
+  <!-- ── HISTORY VIEW ── -->
+  <div id="viewHistory" class="view">
+    <div class="header">
+      <button class="header-btn" onclick="showView('camera')">Scan</button>
+      <span class="header-title">History</span>
+      <span></span>
+    </div>
+    <div class="filter-bar">
+      <button class="filter-chip active" data-filter="all" onclick="filterHistory('all', this)">All</button>
+      <button class="filter-chip" data-filter="pending_fso" onclick="filterHistory('pending_fso', this)">Pending FSO</button>
+      <button class="filter-chip" data-filter="fso_notified" onclick="filterHistory('fso_notified', this)">FSO Notified</button>
+    </div>
+    <div class="history-scroll" id="historyList"></div>
+    <div class="disclaimer">This tool does not authorize use or rejection of products.</div>
+  </div>
+
+  <!-- ── DETAIL VIEW ── -->
+  <div id="viewDetail" class="view">
+    <div class="header">
+      <button class="header-btn" onclick="showView('history')">Back</button>
+      <span class="header-title">Detail</span>
+      <span></span>
+    </div>
+    <div class="detail-scroll" id="detailContent"></div>
+    <div class="disclaimer">This tool does not authorize use or rejection of products.</div>
+  </div>
+
+  <!-- ── Tab Bar ── -->
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tabCamera" onclick="showView('camera')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      Scan
+    </button>
+    <button class="tab-btn" id="tabHistory" onclick="showView('history')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+      History
+    </button>
+  </div>
+</div>
+
+<!-- ── Notes Modal ── -->
+<div class="modal-overlay" id="notesModal">
+  <div class="modal-sheet">
+    <h3>Add Notes</h3>
+    <textarea id="notesInput" placeholder="Describe observations, packaging condition, labeling details..."></textarea>
+    <div class="modal-actions">
+      <button class="action-btn secondary" onclick="closeNotes()">Cancel</button>
+      <button class="action-btn primary" onclick="saveNotes()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   68R Approved Source Awareness — Decision-Support Tool ONLY
+   This application does not authorize use or rejection of products.
+   ================================================================ */
+
+// ── Allowed Status Phrases ──
+const STATUSES = [
+  { key: 'listed',  text: 'Listed \u2014 approval status unknown', css: 'listed' },
+  { key: 'pending', text: 'Pending FSO review',                    css: 'pending' },
+  { key: 'mixed',   text: 'Mixed outcomes observed',               css: 'mixed' },
+  { key: 'none',    text: 'No prior submissions found',            css: 'none' }
+];
+
+// ── State ──
+let db = null;
+let currentSubmission = null;
+let cameraStream = null;
+let currentFilter = 'all';
+
+// ── IndexedDB Setup ──
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('SourceAwareness68R', 1);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('submissions')) {
+        const store = d.createObjectStore('submissions', { keyPath: 'id', autoIncrement: true });
+        store.createIndex('timestamp', 'timestamp');
+        store.createIndex('escalationStatus', 'escalationStatus');
+      }
+    };
+    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+// ── Camera ──
+async function initCamera() {
+  const video = document.getElementById('cameraVideo');
+  const placeholder = document.getElementById('cameraPlaceholder');
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    video.srcObject = cameraStream;
+    video.style.display = 'block';
+    placeholder.style.display = 'none';
+  } catch {
+    video.style.display = 'none';
+    placeholder.style.display = 'flex';
+  }
+}
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+}
+
+function capturePhoto() {
+  const video = document.getElementById('cameraVideo');
+  if (!video.srcObject) {
+    // Fallback: trigger file input
+    document.getElementById('fileInput').click();
+    return;
+  }
+  const canvas = document.getElementById('cameraCanvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  canvas.toBlob((blob) => {
+    if (blob) processPhoto(blob, URL.createObjectURL(blob));
+  }, 'image/jpeg', 0.85);
+}
+
+function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  processPhoto(file, URL.createObjectURL(file));
+  event.target.value = '';
+}
+
+// ── Processing ──
+async function processPhoto(blob, dataUrl) {
+  const upc = document.getElementById('upcInput').value.trim() || null;
+  const status = pickStatus(upc);
+  const now = new Date().toISOString();
+
+  const submission = {
+    photoBlob: blob,
+    photoDataUrl: dataUrl,
+    upc: upc,
+    productDescription: null,
+    timestamp: now,
+    statusDisplayed: status.text,
+    statusKey: status.key,
+    notes: null,
+    escalationStatus: 'none',
+    escalationTimestamp: null,
+    auditLog: [
+      { action: 'submission_created', timestamp: now, detail: 'Photo captured and processed.' },
+      { action: 'status_displayed', timestamp: now, detail: 'Status shown: ' + status.text }
+    ]
+  };
+
+  const id = await saveSubmission(submission);
+  submission.id = id;
+  currentSubmission = submission;
+
+  document.getElementById('upcInput').value = '';
+  renderResult();
+  showView('result');
+}
+
+function lookupUPC() {
+  const upc = document.getElementById('upcInput').value.trim();
+  if (!upc) return;
+  // Create a submission without a photo for UPC-only lookup
+  const status = pickStatus(upc);
+  const now = new Date().toISOString();
+  const submission = {
+    photoBlob: null,
+    photoDataUrl: null,
+    upc: upc,
+    productDescription: null,
+    timestamp: now,
+    statusDisplayed: status.text,
+    statusKey: status.key,
+    notes: null,
+    escalationStatus: 'none',
+    escalationTimestamp: null,
+    auditLog: [
+      { action: 'submission_created', timestamp: now, detail: 'UPC manual lookup.' },
+      { action: 'status_displayed', timestamp: now, detail: 'Status shown: ' + status.text }
+    ]
+  };
+  saveSubmission(submission).then(id => {
+    submission.id = id;
+    currentSubmission = submission;
+    document.getElementById('upcInput').value = '';
+    renderResult();
+    showView('result');
+  });
+}
+
+// Mock status assignment — deterministic from UPC if present, otherwise random
+function pickStatus(upc) {
+  if (upc) {
+    const hash = Array.from(upc).reduce((a, c) => a + c.charCodeAt(0), 0);
+    return STATUSES[hash % STATUSES.length];
+  }
+  return STATUSES[Math.floor(Math.random() * STATUSES.length)];
+}
+
+// ── Persistence ──
+function saveSubmission(sub) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('submissions', 'readwrite');
+    const req = tx.objectStore('submissions').add(sub);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function updateSubmission(sub) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('submissions', 'readwrite');
+    const req = tx.objectStore('submissions').put(sub);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getAllSubmissions() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('submissions', 'readonly');
+    const req = tx.objectStore('submissions').getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getSubmission(id) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('submissions', 'readonly');
+    const req = tx.objectStore('submissions').get(id);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// ── Result Rendering ──
+function renderResult() {
+  const s = currentSubmission;
+  if (!s) return;
+
+  const photo = document.getElementById('resultPhoto');
+  if (s.photoDataUrl) {
+    photo.src = s.photoDataUrl;
+    photo.style.display = 'block';
+  } else {
+    photo.style.display = 'none';
+  }
+
+  const meta = document.getElementById('resultMeta');
+  const parts = [formatDate(s.timestamp)];
+  if (s.upc) parts.push('UPC: ' + s.upc);
+  meta.textContent = parts.join(' \u2022 ');
+
+  const badge = document.getElementById('resultBadge');
+  badge.textContent = s.statusDisplayed;
+  badge.className = 'status-badge ' + (s.statusKey || 'none');
+
+  const guidance = document.getElementById('resultGuidance');
+  guidance.textContent = 'If uncertain about this product, document observations and contact your FSO (640) for guidance.';
+
+  const escBtn = document.getElementById('escalateBtn');
+  if (s.escalationStatus === 'pending_fso' || s.escalationStatus === 'fso_notified') {
+    escBtn.textContent = 'Pending FSO Review';
+    escBtn.disabled = true;
+    escBtn.style.opacity = '0.6';
+  } else {
+    escBtn.textContent = 'Document & Contact FSO';
+    escBtn.disabled = false;
+    escBtn.style.opacity = '1';
+  }
+}
+
+// ── Escalation ──
+async function escalateToFSO() {
+  if (!currentSubmission || currentSubmission.escalationStatus !== 'none') return;
+  const now = new Date().toISOString();
+  currentSubmission.escalationStatus = 'pending_fso';
+  currentSubmission.escalationTimestamp = now;
+  currentSubmission.statusDisplayed = 'Pending FSO review';
+  currentSubmission.statusKey = 'pending';
+  currentSubmission.auditLog.push({
+    action: 'escalation_initiated',
+    timestamp: now,
+    detail: 'Soldier initiated FSO escalation. Status changed to: Pending FSO review.'
+  });
+  await updateSubmission(currentSubmission);
+  renderResult();
+}
+
+// ── Notes ──
+function openNotes() {
+  document.getElementById('notesInput').value = currentSubmission?.notes || '';
+  document.getElementById('notesModal').classList.add('active');
+}
+
+function closeNotes() {
+  document.getElementById('notesModal').classList.remove('active');
+}
+
+async function saveNotes() {
+  if (!currentSubmission) return;
+  const text = document.getElementById('notesInput').value.trim();
+  const now = new Date().toISOString();
+  currentSubmission.notes = text || null;
+  currentSubmission.auditLog.push({
+    action: 'notes_updated',
+    timestamp: now,
+    detail: text ? 'Notes saved.' : 'Notes cleared.'
+  });
+  await updateSubmission(currentSubmission);
+  closeNotes();
+}
+
+// ── History ──
+async function renderHistory() {
+  const list = document.getElementById('historyList');
+  const subs = await getAllSubmissions();
+  const filtered = currentFilter === 'all'
+    ? subs
+    : subs.filter(s => s.escalationStatus === currentFilter);
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="history-empty">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>' +
+      '<span>No submissions yet</span></div>';
+    return;
+  }
+
+  // Sort newest first
+  filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  list.innerHTML = filtered.map(s => {
+    const thumb = s.photoDataUrl
+      ? '<img class="history-thumb" src="' + s.photoDataUrl + '" alt="Product photo">'
+      : '<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;color:#aaa;font-size:11px;">No photo</div>';
+    const esc = s.escalationStatus !== 'none'
+      ? '<span class="esc-tag">' + (s.escalationStatus === 'pending_fso' ? 'Pending FSO' : 'FSO Notified') + '</span>'
+      : '';
+    return '<div class="history-card" onclick="openDetail(' + s.id + ')">' +
+      thumb +
+      '<div class="history-info">' +
+        '<div class="status">' + escapeHtml(s.statusDisplayed) + '</div>' +
+        '<div class="date">' + formatDate(s.timestamp) + (s.upc ? ' \u2022 UPC: ' + escapeHtml(s.upc) : '') + '</div>' +
+        esc +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function filterHistory(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  renderHistory();
+}
+
+// ── Detail View ──
+async function openDetail(id) {
+  const s = await getSubmission(id);
+  if (!s) return;
+
+  const content = document.getElementById('detailContent');
+  const photoHtml = s.photoDataUrl
+    ? '<img class="result-photo" src="' + s.photoDataUrl + '" alt="Product photo" style="border-radius:12px;margin-bottom:16px;">'
+    : '';
+
+  const notesHtml = s.notes
+    ? '<div style="margin-top:12px;padding:12px;background:#F0F0F0;border-radius:10px;font-size:14px;line-height:1.4;">' +
+        '<strong>Notes:</strong> ' + escapeHtml(s.notes) +
+      '</div>'
+    : '';
+
+  const auditHtml = (s.auditLog || []).map(a =>
+    '<div class="audit-entry"><span class="time">' + formatDate(a.timestamp) + '</span><br>' + escapeHtml(a.detail) + '</div>'
+  ).join('');
+
+  content.innerHTML =
+    '<div class="result-card">' +
+      photoHtml +
+      '<div class="result-body">' +
+        '<div class="result-meta">' + formatDate(s.timestamp) + (s.upc ? ' \u2022 UPC: ' + escapeHtml(s.upc) : '') + '</div>' +
+        '<div class="status-badge ' + (s.statusKey || 'none') + '">' + escapeHtml(s.statusDisplayed) + '</div>' +
+        notesHtml +
+      '</div>' +
+    '</div>' +
+    '<div class="audit-section">' +
+      '<h4>Audit Trail</h4>' +
+      '<div style="font-size:12px;color:#AEAEB2;margin-bottom:8px;">Record of app-displayed information. No approval decisions were issued by this tool.</div>' +
+      auditHtml +
+    '</div>';
+
+  showView('detail');
+}
+
+// ── Navigation ──
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view' + name.charAt(0).toUpperCase() + name.slice(1)).classList.add('active');
+
+  document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+  if (name === 'camera' || name === 'result') {
+    document.getElementById('tabCamera').classList.add('active');
+  } else {
+    document.getElementById('tabHistory').classList.add('active');
+  }
+
+  if (name === 'camera') initCamera();
+  if (name === 'history') renderHistory();
+}
+
+// ── Utilities ──
+function formatDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+    ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// ── Service Worker Registration ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
+// ── Init ──
+openDB().then(() => {
+  initCamera();
+});
+</script>
+</body>
+</html>

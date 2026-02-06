@@ -1,0 +1,22 @@
+{
+  "name": "68R Source Awareness",
+  "short_name": "68R Source",
+  "description": "Decision-support tool for 68R Food Inspection Specialists — listing awareness only.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#FAFAFA",
+  "theme_color": "#3478F6",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
