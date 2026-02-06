@@ -218,6 +218,62 @@ input, textarea { font-family: inherit; border: none; outline: none; -webkit-app
   border-bottom: 1px solid #F0F0F0; line-height: 1.4;
 }
 .audit-entry .time { font-size: 11px; color: #AEAEB2; }
+
+/* ── Search View ── */
+.search-area { flex: 1; overflow-y: auto; padding: 16px; }
+.search-bar {
+  display: flex; gap: 10px; padding: 12px 16px;
+  background: #fff; border-bottom: 1px solid #E5E5EA; flex-shrink: 0;
+}
+.search-bar input {
+  flex: 1; height: 40px; border-radius: 10px; background: #F0F0F0;
+  padding: 0 14px; font-size: 15px;
+}
+.search-bar button {
+  height: 40px; padding: 0 16px; border-radius: 10px;
+  background: #3478F6; color: #fff; font-size: 15px; font-weight: 500;
+  white-space: nowrap;
+}
+.search-source-bar {
+  display: flex; gap: 8px; padding: 10px 16px; overflow-x: auto;
+  flex-shrink: 0; background: #fff;
+}
+.source-chip {
+  padding: 6px 14px; border-radius: 16px; font-size: 13px;
+  background: #F0F0F0; color: #636366; white-space: nowrap;
+}
+.source-chip.active { background: #3478F6; color: #fff; }
+.search-result-card {
+  background: #fff; border-radius: 12px;
+  box-shadow: 0 0 6px rgba(0,0,0,0.06); padding: 14px;
+  margin-bottom: 10px;
+}
+.search-result-card .est-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.search-result-card .est-detail { font-size: 13px; color: #636366; line-height: 1.4; }
+.search-result-card .est-detail span { display: block; margin-top: 2px; }
+.search-result-card .source-tag {
+  display: inline-block; font-size: 11px; padding: 2px 8px;
+  border-radius: 8px; margin-top: 6px;
+  background: #E0EDFF; color: #1D5BBF;
+}
+.data-status-bar {
+  padding: 8px 16px; font-size: 12px; color: #8E8E93;
+  background: #F7F7F7; flex-shrink: 0; text-align: center;
+}
+.data-status-bar .loaded { color: #34A853; }
+.data-status-bar .missing { color: #F5A623; }
+.search-empty {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; flex: 1; color: #8E8E93;
+  text-align: center; gap: 8px; padding: 40px 20px; line-height: 1.5;
+}
+.search-empty svg { width: 48px; height: 48px; opacity: 0.4; }
+.search-hint { font-size: 13px; color: #AEAEB2; text-align: center; padding: 8px 16px; }
+.result-match-info {
+  font-size: 13px; color: #636366; background: #F7F7F7;
+  border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; line-height: 1.5;
+}
+.result-match-info .match-label { font-weight: 600; color: #1C1C1E; }
 </style>
 </head>
 <body>
@@ -247,8 +303,8 @@ input, textarea { font-family: inherit; border: none; outline: none; -webkit-app
       </div>
     </div>
     <div class="upc-bar">
-      <input type="text" id="upcInput" placeholder="Enter UPC manually" inputmode="numeric" pattern="[0-9]*">
-      <button onclick="lookupUPC()">Look Up</button>
+      <input type="text" id="upcInput" placeholder="Establishment # or name" inputmode="text">
+      <button onclick="lookupFromCamera()">Look Up</button>
     </div>
     <div class="disclaimer">This tool does not authorize use or rejection of products.</div>
   </div>
@@ -265,6 +321,7 @@ input, textarea { font-family: inherit; border: none; outline: none; -webkit-app
         <img id="resultPhoto" class="result-photo" alt="Captured product photo">
         <div class="result-body">
           <div class="result-meta" id="resultMeta"></div>
+          <div id="resultMatchInfo" class="result-match-info" style="display:none;"></div>
           <div class="status-badge" id="resultBadge"></div>
           <div class="result-guidance" id="resultGuidance"></div>
         </div>
@@ -274,6 +331,34 @@ input, textarea { font-family: inherit; border: none; outline: none; -webkit-app
       <button class="action-btn secondary" onclick="openNotes()">Add Notes</button>
       <button class="action-btn amber" id="escalateBtn" onclick="escalateToFSO()">Document &amp; Contact FSO</button>
       <button class="action-btn primary" onclick="showView('camera')">New Scan</button>
+    </div>
+    <div class="disclaimer">This tool does not authorize use or rejection of products.</div>
+  </div>
+
+  <!-- ── SEARCH VIEW ── -->
+  <div id="viewSearch" class="view">
+    <div class="header">
+      <span></span>
+      <span class="header-title">Directory Search</span>
+      <span></span>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="searchInput" placeholder="Search name, est. #, city, state..." oninput="handleSearchInput()" onkeydown="if(event.key==='Enter')runSearch()">
+      <button onclick="runSearch()">Search</button>
+    </div>
+    <div class="search-source-bar">
+      <button class="source-chip active" onclick="setSearchSource('all', this)">All Sources</button>
+      <button class="source-chip" onclick="setSearchSource('mpi', this)">FSIS MPI</button>
+      <button class="source-chip" onclick="setSearchSource('ims', this)">IMS Dairy</button>
+    </div>
+    <div id="dataStatusBar" class="data-status-bar"></div>
+    <div class="search-area" id="searchResults">
+      <div class="search-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <span>Search public directories</span>
+        <span style="font-size:12px;">FSIS Meat/Poultry/Egg &bull; Interstate Milk Shippers</span>
+        <span style="font-size:11px;color:#AEAEB2;margin-top:8px;">Listing in a directory is informational only.<br>It does not indicate approval status.</span>
+      </div>
     </div>
     <div class="disclaimer">This tool does not authorize use or rejection of products.</div>
   </div>
@@ -311,6 +396,10 @@ input, textarea { font-family: inherit; border: none; outline: none; -webkit-app
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
       Scan
     </button>
+    <button class="tab-btn" id="tabSearch" onclick="showView('search')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      Search
+    </button>
     <button class="tab-btn" id="tabHistory" onclick="showView('history')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
       History
@@ -337,23 +426,28 @@ input, textarea { font-family: inherit; border: none; outline: none; -webkit-app
    ================================================================ */
 
 // ── Allowed Status Phrases ──
-const STATUSES = [
-  { key: 'listed',  text: 'Listed \u2014 approval status unknown', css: 'listed' },
-  { key: 'pending', text: 'Pending FSO review',                    css: 'pending' },
-  { key: 'mixed',   text: 'Mixed outcomes observed',               css: 'mixed' },
-  { key: 'none',    text: 'No prior submissions found',            css: 'none' }
-];
+const STATUSES = {
+  listed:  { key: 'listed',  text: 'Listed \u2014 approval status unknown' },
+  pending: { key: 'pending', text: 'Pending FSO review' },
+  mixed:   { key: 'mixed',   text: 'Mixed outcomes observed' },
+  none:    { key: 'none',    text: 'No prior submissions found' }
+};
 
 // ── State ──
 let db = null;
 let currentSubmission = null;
 let cameraStream = null;
 let currentFilter = 'all';
+let searchSource = 'all';
+
+// Reference data
+let mpiData = null;   // Array of {est, name, city, state, zip, activities}
+let imsData = null;   // Array of {name, plant_id, products, state}
 
 // ── IndexedDB Setup ──
 function openDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('SourceAwareness68R', 1);
+    const req = indexedDB.open('SourceAwareness68R', 2);
     req.onupgradeneeded = (e) => {
       const d = e.target.result;
       if (!d.objectStoreNames.contains('submissions')) {
@@ -365,6 +459,153 @@ function openDB() {
     req.onsuccess = (e) => { db = e.target.result; resolve(db); };
     req.onerror = (e) => reject(e.target.error);
   });
+}
+
+// ── Reference Data Loading ──
+async function loadReferenceData() {
+  const loadJSON = async (url) => {
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch { return null; }
+  };
+
+  const [mpi, ims] = await Promise.all([
+    loadJSON('./data/mpi_directory.json'),
+    loadJSON('./data/ims_shippers.json')
+  ]);
+
+  mpiData = mpi;
+  imsData = ims;
+  updateDataStatus();
+}
+
+function updateDataStatus() {
+  const bar = document.getElementById('dataStatusBar');
+  if (!bar) return;
+  const parts = [];
+  if (mpiData) {
+    parts.push('<span class="loaded">FSIS MPI: ' + mpiData.length.toLocaleString() + ' establishments</span>');
+  } else {
+    parts.push('<span class="missing">FSIS MPI: not loaded</span>');
+  }
+  parts.push(' &bull; ');
+  if (imsData) {
+    parts.push('<span class="loaded">IMS: ' + imsData.length.toLocaleString() + ' shippers</span>');
+  } else {
+    parts.push('<span class="missing">IMS: not loaded</span>');
+  }
+  bar.innerHTML = parts.join('');
+}
+
+// ── Search ──
+function searchDirectories(query) {
+  const q = query.toLowerCase().trim();
+  if (!q) return [];
+
+  const results = [];
+  const terms = q.split(/\s+/);
+
+  // Search MPI
+  if (mpiData && (searchSource === 'all' || searchSource === 'mpi')) {
+    for (const entry of mpiData) {
+      const haystack = [entry.est, entry.name, entry.city, entry.state, entry.zip, entry.activities]
+        .join(' ').toLowerCase();
+      if (terms.every(t => haystack.includes(t))) {
+        results.push({ ...entry, _source: 'FSIS MPI' });
+      }
+      if (results.length >= 50) break;
+    }
+  }
+
+  // Search IMS
+  if (imsData && (searchSource === 'all' || searchSource === 'ims')) {
+    const imsLimit = results.length >= 50 ? 0 : 50 - results.length;
+    let count = 0;
+    for (const entry of imsData) {
+      if (count >= imsLimit) break;
+      const haystack = [entry.name, entry.plant_id, entry.products, entry.state]
+        .join(' ').toLowerCase();
+      if (terms.every(t => haystack.includes(t))) {
+        results.push({ ...entry, _source: 'IMS Dairy' });
+        count++;
+      }
+    }
+  }
+
+  return results;
+}
+
+function runSearch() {
+  const query = document.getElementById('searchInput').value.trim();
+  if (!query) return;
+  const results = searchDirectories(query);
+  renderSearchResults(results, query);
+}
+
+function handleSearchInput() {
+  // Live search after 2+ characters
+  const q = document.getElementById('searchInput').value.trim();
+  if (q.length >= 2) {
+    const results = searchDirectories(q);
+    renderSearchResults(results, q);
+  }
+}
+
+function renderSearchResults(results, query) {
+  const area = document.getElementById('searchResults');
+
+  if (!mpiData && !imsData) {
+    area.innerHTML = '<div class="search-empty">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>' +
+      '<span>Reference data not loaded</span>' +
+      '<span style="font-size:12px;">Run <strong>python3 fetch-data.py</strong> on your computer,<br>then commit and push the data/ folder.</span>' +
+      '</div>';
+    return;
+  }
+
+  if (results.length === 0) {
+    area.innerHTML = '<div class="search-empty">' +
+      '<span>No directory listings found for "' + escapeHtml(query) + '"</span>' +
+      '<span style="font-size:12px;color:#AEAEB2;">Try a different name, establishment number, or city/state.</span>' +
+      '</div>';
+    return;
+  }
+
+  const hint = results.length >= 50 ? '<div class="search-hint">Showing first 50 results. Try a more specific search.</div>' : '';
+
+  area.innerHTML = hint + results.map(r => {
+    if (r._source === 'FSIS MPI') {
+      return '<div class="search-result-card">' +
+        '<div class="est-name">' + escapeHtml(r.name) + '</div>' +
+        '<div class="est-detail">' +
+          '<span>Est. #' + escapeHtml(r.est) + '</span>' +
+          '<span>' + escapeHtml(r.city) + ', ' + escapeHtml(r.state) + (r.zip ? ' ' + escapeHtml(r.zip) : '') + '</span>' +
+          (r.activities ? '<span>' + escapeHtml(r.activities) + '</span>' : '') +
+        '</div>' +
+        '<span class="source-tag">FSIS MPI</span>' +
+      '</div>';
+    } else {
+      return '<div class="search-result-card">' +
+        '<div class="est-name">' + escapeHtml(r.name) + '</div>' +
+        '<div class="est-detail">' +
+          '<span>Plant ID: ' + escapeHtml(r.plant_id) + '</span>' +
+          '<span>State: ' + escapeHtml(r.state) + '</span>' +
+          (r.products ? '<span>Products: ' + escapeHtml(r.products) + '</span>' : '') +
+        '</div>' +
+        '<span class="source-tag">IMS Dairy</span>' +
+      '</div>';
+    }
+  }).join('');
+}
+
+function setSearchSource(source, btn) {
+  searchSource = source;
+  document.querySelectorAll('.source-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  const q = document.getElementById('searchInput').value.trim();
+  if (q) runSearch();
 }
 
 // ── Camera ──
@@ -394,7 +635,6 @@ function stopCamera() {
 function capturePhoto() {
   const video = document.getElementById('cameraVideo');
   if (!video.srcObject) {
-    // Fallback: trigger file input
     document.getElementById('fileInput').click();
     return;
   }
@@ -415,25 +655,38 @@ function handleFileUpload(event) {
 }
 
 // ── Processing ──
+function lookupEstablishment(query) {
+  if (!query) return { status: STATUSES.none, matches: [] };
+  const results = searchDirectories(query);
+  if (results.length > 0) {
+    return { status: STATUSES.listed, matches: results.slice(0, 3) };
+  }
+  return { status: STATUSES.none, matches: [] };
+}
+
 async function processPhoto(blob, dataUrl) {
-  const upc = document.getElementById('upcInput').value.trim() || null;
-  const status = pickStatus(upc);
+  const queryText = document.getElementById('upcInput').value.trim() || null;
+  const lookup = lookupEstablishment(queryText);
   const now = new Date().toISOString();
 
   const submission = {
     photoBlob: blob,
     photoDataUrl: dataUrl,
-    upc: upc,
+    upc: queryText,
     productDescription: null,
     timestamp: now,
-    statusDisplayed: status.text,
-    statusKey: status.key,
+    statusDisplayed: lookup.status.text,
+    statusKey: lookup.status.key,
+    matchDetails: lookup.matches.length > 0 ? lookup.matches : null,
     notes: null,
     escalationStatus: 'none',
     escalationTimestamp: null,
     auditLog: [
-      { action: 'submission_created', timestamp: now, detail: 'Photo captured and processed.' },
-      { action: 'status_displayed', timestamp: now, detail: 'Status shown: ' + status.text }
+      { action: 'submission_created', timestamp: now, detail: 'Photo captured and processed.' + (queryText ? ' Query: ' + queryText : '') },
+      { action: 'directory_lookup', timestamp: now, detail: lookup.matches.length > 0
+        ? 'Directory search returned ' + lookup.matches.length + ' listing(s). Source(s): ' + lookup.matches.map(m => m._source).join(', ')
+        : 'No directory listings found.' + ((!mpiData && !imsData) ? ' Reference data not loaded.' : '') },
+      { action: 'status_displayed', timestamp: now, detail: 'Status shown: ' + lookup.status.text }
     ]
   };
 
@@ -446,26 +699,30 @@ async function processPhoto(blob, dataUrl) {
   showView('result');
 }
 
-function lookupUPC() {
-  const upc = document.getElementById('upcInput').value.trim();
-  if (!upc) return;
-  // Create a submission without a photo for UPC-only lookup
-  const status = pickStatus(upc);
+function lookupFromCamera() {
+  const query = document.getElementById('upcInput').value.trim();
+  if (!query) return;
+
+  const lookup = lookupEstablishment(query);
   const now = new Date().toISOString();
   const submission = {
     photoBlob: null,
     photoDataUrl: null,
-    upc: upc,
+    upc: query,
     productDescription: null,
     timestamp: now,
-    statusDisplayed: status.text,
-    statusKey: status.key,
+    statusDisplayed: lookup.status.text,
+    statusKey: lookup.status.key,
+    matchDetails: lookup.matches.length > 0 ? lookup.matches : null,
     notes: null,
     escalationStatus: 'none',
     escalationTimestamp: null,
     auditLog: [
-      { action: 'submission_created', timestamp: now, detail: 'UPC manual lookup.' },
-      { action: 'status_displayed', timestamp: now, detail: 'Status shown: ' + status.text }
+      { action: 'submission_created', timestamp: now, detail: 'Manual lookup. Query: ' + query },
+      { action: 'directory_lookup', timestamp: now, detail: lookup.matches.length > 0
+        ? 'Directory search returned ' + lookup.matches.length + ' listing(s). Source(s): ' + lookup.matches.map(m => m._source).join(', ')
+        : 'No directory listings found.' + ((!mpiData && !imsData) ? ' Reference data not loaded.' : '') },
+      { action: 'status_displayed', timestamp: now, detail: 'Status shown: ' + lookup.status.text }
     ]
   };
   saveSubmission(submission).then(id => {
@@ -475,15 +732,6 @@ function lookupUPC() {
     renderResult();
     showView('result');
   });
-}
-
-// Mock status assignment — deterministic from UPC if present, otherwise random
-function pickStatus(upc) {
-  if (upc) {
-    const hash = Array.from(upc).reduce((a, c) => a + c.charCodeAt(0), 0);
-    return STATUSES[hash % STATUSES.length];
-  }
-  return STATUSES[Math.floor(Math.random() * STATUSES.length)];
 }
 
 // ── Persistence ──
@@ -538,15 +786,39 @@ function renderResult() {
 
   const meta = document.getElementById('resultMeta');
   const parts = [formatDate(s.timestamp)];
-  if (s.upc) parts.push('UPC: ' + s.upc);
+  if (s.upc) parts.push('Query: ' + s.upc);
   meta.textContent = parts.join(' \u2022 ');
+
+  // Show match details if any
+  const matchInfo = document.getElementById('resultMatchInfo');
+  if (s.matchDetails && s.matchDetails.length > 0) {
+    matchInfo.style.display = 'block';
+    matchInfo.innerHTML = s.matchDetails.map(m => {
+      if (m._source === 'FSIS MPI') {
+        return '<div><span class="match-label">' + escapeHtml(m.name) + '</span><br>' +
+          'Est. #' + escapeHtml(m.est) + ' &bull; ' + escapeHtml(m.city) + ', ' + escapeHtml(m.state) +
+          (m.activities ? '<br>' + escapeHtml(m.activities) : '') +
+          '<br><span style="font-size:11px;color:#1D5BBF;">Source: FSIS MPI Directory</span></div>';
+      } else {
+        return '<div><span class="match-label">' + escapeHtml(m.name) + '</span><br>' +
+          'Plant ID: ' + escapeHtml(m.plant_id) + ' &bull; ' + escapeHtml(m.state) +
+          '<br><span style="font-size:11px;color:#1D5BBF;">Source: Interstate Milk Shippers</span></div>';
+      }
+    }).join('<hr style="border:none;border-top:1px solid #E5E5EA;margin:8px 0;">');
+  } else {
+    matchInfo.style.display = 'none';
+  }
 
   const badge = document.getElementById('resultBadge');
   badge.textContent = s.statusDisplayed;
   badge.className = 'status-badge ' + (s.statusKey || 'none');
 
   const guidance = document.getElementById('resultGuidance');
-  guidance.textContent = 'If uncertain about this product, document observations and contact your FSO (640) for guidance.';
+  if (s.statusKey === 'listed') {
+    guidance.textContent = 'This establishment was found in a public directory. Listing is informational only and does not indicate approval. If uncertain, document observations and contact your FSO (640).';
+  } else {
+    guidance.textContent = 'No directory listing found for this query. Document observations and contact your FSO (640) for guidance.';
+  }
 
   const escBtn = document.getElementById('escalateBtn');
   if (s.escalationStatus === 'pending_fso' || s.escalationStatus === 'fso_notified') {
@@ -616,7 +888,6 @@ async function renderHistory() {
     return;
   }
 
-  // Sort newest first
   filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   list.innerHTML = filtered.map(s => {
@@ -630,7 +901,7 @@ async function renderHistory() {
       thumb +
       '<div class="history-info">' +
         '<div class="status">' + escapeHtml(s.statusDisplayed) + '</div>' +
-        '<div class="date">' + formatDate(s.timestamp) + (s.upc ? ' \u2022 UPC: ' + escapeHtml(s.upc) : '') + '</div>' +
+        '<div class="date">' + formatDate(s.timestamp) + (s.upc ? ' \u2022 ' + escapeHtml(s.upc) : '') + '</div>' +
         esc +
       '</div>' +
     '</div>';
@@ -654,6 +925,18 @@ async function openDetail(id) {
     ? '<img class="result-photo" src="' + s.photoDataUrl + '" alt="Product photo" style="border-radius:12px;margin-bottom:16px;">'
     : '';
 
+  const matchHtml = (s.matchDetails && s.matchDetails.length > 0)
+    ? '<div class="result-match-info">' + s.matchDetails.map(m => {
+        if (m._source === 'FSIS MPI') {
+          return '<span class="match-label">' + escapeHtml(m.name) + '</span> &mdash; Est. #' + escapeHtml(m.est) +
+            ', ' + escapeHtml(m.city) + ' ' + escapeHtml(m.state) + ' (FSIS MPI)';
+        } else {
+          return '<span class="match-label">' + escapeHtml(m.name) + '</span> &mdash; ' +
+            escapeHtml(m.plant_id) + ', ' + escapeHtml(m.state) + ' (IMS)';
+        }
+      }).join('<br>') + '</div>'
+    : '';
+
   const notesHtml = s.notes
     ? '<div style="margin-top:12px;padding:12px;background:#F0F0F0;border-radius:10px;font-size:14px;line-height:1.4;">' +
         '<strong>Notes:</strong> ' + escapeHtml(s.notes) +
@@ -668,7 +951,8 @@ async function openDetail(id) {
     '<div class="result-card">' +
       photoHtml +
       '<div class="result-body">' +
-        '<div class="result-meta">' + formatDate(s.timestamp) + (s.upc ? ' \u2022 UPC: ' + escapeHtml(s.upc) : '') + '</div>' +
+        '<div class="result-meta">' + formatDate(s.timestamp) + (s.upc ? ' \u2022 ' + escapeHtml(s.upc) : '') + '</div>' +
+        matchHtml +
         '<div class="status-badge ' + (s.statusKey || 'none') + '">' + escapeHtml(s.statusDisplayed) + '</div>' +
         notesHtml +
       '</div>' +
@@ -690,12 +974,18 @@ function showView(name) {
   document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
   if (name === 'camera' || name === 'result') {
     document.getElementById('tabCamera').classList.add('active');
+  } else if (name === 'search') {
+    document.getElementById('tabSearch').classList.add('active');
   } else {
     document.getElementById('tabHistory').classList.add('active');
   }
 
   if (name === 'camera') initCamera();
   if (name === 'history') renderHistory();
+  if (name === 'search') {
+    updateDataStatus();
+    document.getElementById('searchInput').focus();
+  }
 }
 
 // ── Utilities ──
@@ -706,6 +996,7 @@ function formatDate(iso) {
 }
 
 function escapeHtml(str) {
+  if (!str) return '';
   const d = document.createElement('div');
   d.textContent = str;
   return d.innerHTML;
@@ -719,6 +1010,7 @@ if ('serviceWorker' in navigator) {
 // ── Init ──
 openDB().then(() => {
   initCamera();
+  loadReferenceData();
 });
 </script>
 </body>
