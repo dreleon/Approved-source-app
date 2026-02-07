@@ -32,10 +32,24 @@ MPI_CSV_URL = (
 
 def fetch_mpi():
     print('Downloading FSIS MPI Directory CSV...')
-    req = urllib.request.Request(MPI_CSV_URL, headers={'User-Agent': 'Mozilla/5.0'})
     print('  (This is a large file — may take a few minutes...)')
-    with urllib.request.urlopen(req, timeout=300) as resp:
-        raw = resp.read().decode('utf-8-sig')
+    req = urllib.request.Request(MPI_CSV_URL, headers={
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Accept': 'text/csv,text/plain,*/*',
+        'Accept-Encoding': 'identity',
+    })
+    # Read in chunks to avoid timeout on large response
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        chunks = []
+        while True:
+            chunk = resp.read(65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            sys.stdout.write('\r  Downloaded %d KB...' % (sum(len(c) for c in chunks) // 1024))
+            sys.stdout.flush()
+        raw = b''.join(chunks).decode('utf-8-sig')
+        print()
 
     reader = csv.DictReader(raw.splitlines())
     entries = []
