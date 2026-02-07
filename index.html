@@ -9,6 +9,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <title>68R Source Awareness</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
 /* ── Reset & Base ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -274,6 +275,32 @@ input, textarea { font-family: inherit; border: none; outline: none; -webkit-app
   border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; line-height: 1.5;
 }
 .result-match-info .match-label { font-weight: 600; color: #1C1C1E; }
+
+/* ── Scanning Overlay ── */
+.scan-overlay {
+  display: none; position: fixed; inset: 0; z-index: 90;
+  background: rgba(0,0,0,0.7); flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px;
+}
+.scan-overlay.active { display: flex; }
+.scan-spinner {
+  width: 48px; height: 48px; border-radius: 50%;
+  border: 4px solid rgba(255,255,255,0.2);
+  border-top-color: #fff;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.scan-status { color: #fff; font-size: 15px; text-align: center; padding: 0 20px; }
+.scan-found {
+  background: rgba(52,120,246,0.9); color: #fff;
+  padding: 10px 20px; border-radius: 12px; font-size: 15px;
+  font-weight: 500; margin-top: 8px;
+}
+.ocr-tag {
+  display: inline-block; font-size: 11px; padding: 2px 8px;
+  border-radius: 8px; background: #E8F5E9; color: #2E7D32;
+  margin-left: 6px;
+}
 </style>
 </head>
 <body>
@@ -405,6 +432,12 @@ input, textarea { font-family: inherit; border: none; outline: none; -webkit-app
       History
     </button>
   </div>
+</div>
+
+<!-- ── Scanning Overlay ── -->
+<div class="scan-overlay" id="scanOverlay">
+  <div class="scan-spinner"></div>
+  <div class="scan-status" id="scanStatus">Reading label text...</div>
 </div>
 
 <!-- ── Notes Modal ── -->
@@ -654,7 +687,43 @@ function handleFileUpload(event) {
   event.target.value = '';
 }
 
-// ── Processing ──
+// ── OCR & Processing ──
+
+// Patterns that match establishment marks on USDA-inspected products
+// Examples: "EST. 7721", "EST 244B", "P-1234", "M-7721", "E-123", "EST. P-1234"
+const EST_PATTERNS = [
+  /\bEST\.?\s*#?\s*([A-Z]?[\-]?\d{1,6}[A-Z]?)\b/gi,
+  /\b([PME])[\-\s]?(\d{1,6}[A-Z]?)\b/g,
+  /\bUSDA\s+(\d{1,6}[A-Z]?)\b/gi,
+  /\bINSP['.]?D?\s*#?\s*(\d{1,6}[A-Z]?)\b/gi,
+];
+
+function extractEstNumbers(text) {
+  const found = new Set();
+  for (const pattern of EST_PATTERNS) {
+    pattern.lastIndex = 0;
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      // For P-1234 style matches, combine the letter and number
+      if (match[2]) {
+        found.add((match[1] + '-' + match[2]).toUpperCase());
+      } else {
+        found.add(match[1].toUpperCase().replace(/^#/, ''));
+      }
+    }
+  }
+  return Array.from(found);
+}
+
+function showScanOverlay(message) {
+  document.getElementById('scanStatus').textContent = message || 'Reading label text...';
+  document.getElementById('scanOverlay').classList.add('active');
+}
+
+function hideScanOverlay() {
+  document.getElementById('scanOverlay').classList.remove('active');
+}
+
 function lookupEstablishment(query) {
   if (!query) return { status: STATUSES.none, matches: [] };
   const results = searchDirectories(query);
@@ -664,30 +733,93 @@ function lookupEstablishment(query) {
   return { status: STATUSES.none, matches: [] };
 }
 
+async function runOCR(imageSource) {
+  try {
+    showScanOverlay('Reading label text...');
+    const worker = await Tesseract.createWorker('eng');
+    const { data } = await worker.recognize(imageSource);
+    await worker.terminate();
+    return data.text || '';
+  } catch (err) {
+    console.warn('OCR failed:', err);
+    return '';
+  } finally {
+    hideScanOverlay();
+  }
+}
+
 async function processPhoto(blob, dataUrl) {
-  const queryText = document.getElementById('upcInput').value.trim() || null;
-  const lookup = lookupEstablishment(queryText);
+  const manualQuery = document.getElementById('upcInput').value.trim() || null;
   const now = new Date().toISOString();
+  const auditLog = [
+    { action: 'submission_created', timestamp: now, detail: 'Photo captured.' + (manualQuery ? ' Manual query: ' + manualQuery : '') }
+  ];
+
+  let ocrText = '';
+  let estNumbers = [];
+  let lookup = { status: STATUSES.none, matches: [] };
+
+  // If the user typed something, use that first
+  if (manualQuery) {
+    lookup = lookupEstablishment(manualQuery);
+    auditLog.push({ action: 'manual_lookup', timestamp: new Date().toISOString(),
+      detail: 'Manual query: ' + manualQuery + '. ' + (lookup.matches.length > 0
+        ? 'Found ' + lookup.matches.length + ' listing(s).'
+        : 'No listings found.') });
+  }
+
+  // Run OCR on the photo
+  showScanOverlay('Reading label text...');
+  ocrText = await runOCR(blob);
+
+  if (ocrText.trim()) {
+    estNumbers = extractEstNumbers(ocrText);
+    auditLog.push({ action: 'ocr_completed', timestamp: new Date().toISOString(),
+      detail: 'OCR extracted text (' + ocrText.length + ' chars). ' +
+        (estNumbers.length > 0
+          ? 'Establishment numbers detected: ' + estNumbers.join(', ')
+          : 'No establishment numbers detected.') });
+
+    // If manual query didn't find anything (or wasn't provided), try OCR results
+    if (lookup.matches.length === 0 && estNumbers.length > 0) {
+      showScanOverlay('Searching directories...');
+      for (const est of estNumbers) {
+        const estLookup = lookupEstablishment(est);
+        if (estLookup.matches.length > 0) {
+          lookup = estLookup;
+          lookup.ocrSource = est;
+          auditLog.push({ action: 'ocr_directory_match', timestamp: new Date().toISOString(),
+            detail: 'OCR-detected "' + est + '" matched ' + estLookup.matches.length + ' directory listing(s).' });
+          break;
+        }
+      }
+    }
+  } else {
+    auditLog.push({ action: 'ocr_completed', timestamp: new Date().toISOString(),
+      detail: 'OCR could not extract readable text from photo.' });
+  }
+
+  hideScanOverlay();
+
+  auditLog.push({ action: 'status_displayed', timestamp: new Date().toISOString(),
+    detail: 'Status shown: ' + lookup.status.text });
 
   const submission = {
     photoBlob: blob,
     photoDataUrl: dataUrl,
-    upc: queryText,
+    upc: manualQuery,
+    ocrText: ocrText.substring(0, 2000),
+    ocrEstNumbers: estNumbers,
     productDescription: null,
     timestamp: now,
     statusDisplayed: lookup.status.text,
     statusKey: lookup.status.key,
     matchDetails: lookup.matches.length > 0 ? lookup.matches : null,
+    matchedVia: lookup.ocrSource ? 'ocr:' + lookup.ocrSource : (manualQuery ? 'manual' : null),
     notes: null,
     escalationStatus: 'none',
     escalationTimestamp: null,
-    auditLog: [
-      { action: 'submission_created', timestamp: now, detail: 'Photo captured and processed.' + (queryText ? ' Query: ' + queryText : '') },
-      { action: 'directory_lookup', timestamp: now, detail: lookup.matches.length > 0
-        ? 'Directory search returned ' + lookup.matches.length + ' listing(s). Source(s): ' + lookup.matches.map(m => m._source).join(', ')
-        : 'No directory listings found.' + ((!mpiData && !imsData) ? ' Reference data not loaded.' : '') },
-      { action: 'status_displayed', timestamp: now, detail: 'Status shown: ' + lookup.status.text }
-    ]
+    auditLog: auditLog
   };
 
   const id = await saveSubmission(submission);
@@ -787,6 +919,9 @@ function renderResult() {
   const meta = document.getElementById('resultMeta');
   const parts = [formatDate(s.timestamp)];
   if (s.upc) parts.push('Query: ' + s.upc);
+  if (s.matchedVia && s.matchedVia.startsWith('ocr:')) {
+    parts.push('Read from label: ' + s.matchedVia.replace('ocr:', ''));
+  }
   meta.textContent = parts.join(' \u2022 ');
 
   // Show match details if any
@@ -815,9 +950,14 @@ function renderResult() {
 
   const guidance = document.getElementById('resultGuidance');
   if (s.statusKey === 'listed') {
-    guidance.textContent = 'This establishment was found in a public directory. Listing is informational only and does not indicate approval. If uncertain, document observations and contact your FSO (640).';
+    const ocrNote = (s.matchedVia && s.matchedVia.startsWith('ocr:'))
+      ? ' (Establishment number was read from the photo automatically — verify it matches the label.)'
+      : '';
+    guidance.textContent = 'This establishment was found in a public directory. Listing is informational only and does not indicate approval.' + ocrNote + ' If uncertain, document observations and contact your FSO (640).';
+  } else if (s.ocrEstNumbers && s.ocrEstNumbers.length > 0) {
+    guidance.textContent = 'Text was detected on the label (' + s.ocrEstNumbers.join(', ') + ') but no matching directory listing was found. Document observations and contact your FSO (640) for guidance.';
   } else {
-    guidance.textContent = 'No directory listing found for this query. Document observations and contact your FSO (640) for guidance.';
+    guidance.textContent = 'No establishment number could be read from this photo. Try a clearer photo of the USDA inspection mark, or enter the establishment number manually. Document observations and contact your FSO (640) for guidance.';
   }
 
   const escBtn = document.getElementById('escalateBtn');
